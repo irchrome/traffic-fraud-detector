@@ -46,5 +46,14 @@ tr.flagged td { background: rgba(226,87,91,.10); }
 .note b { color: var(--accent); }
 .foot { color: var(--muted); font-size: 12px; margin-top: 26px; line-height: 1.6; }
 .tag-fact { color: var(--accent); } .tag-illu { color: var(--warn); }
+.help { position: relative; cursor: help; color: var(--muted); font-size: 12px; display: inline-block; }
+.help-tip {
+  visibility: hidden; opacity: 0; position: absolute; left: 0; bottom: 150%;
+  width: 230px; max-width: 60vw; background: #0b0f14; border: 1px solid var(--line);
+  color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 12px; line-height: 1.45;
+  z-index: 60; box-shadow: 0 8px 24px rgba(0,0,0,.55); transition: opacity .12s;
+  pointer-events: none; white-space: normal; font-weight: 400; text-transform: none; letter-spacing: normal;
+}
+.help:hover .help-tip, .help:focus .help-tip { visibility: visible; opacity: 1; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
 .legend span i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }

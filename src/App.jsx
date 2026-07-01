@@ -202,7 +202,7 @@ function SignalBars({ sub }) {
 }
 
 function Help({ txt }) {
-  return <span title={txt} style={{ cursor: 'help', color: 'var(--muted)', fontSize: 12 }}>ⓘ</span>
+  return <span className="help" tabIndex={0}>ⓘ<span className="help-tip">{txt}</span></span>
 }
 
 function TariffView({ tf, L, usd, flatMult, setFlatMult, elasticMult, setElasticMult, blendedMult, setBlendedMult }) {
@@ -215,15 +215,15 @@ function TariffView({ tf, L, usd, flatMult, setFlatMult, elasticMult, setElastic
         <h2>{L.tfTitle}</h2>
         <div className="note" style={{ marginBottom: 14 }}>{L.tfPatterns}</div>
         <div className="control">
-          <label><span>{L.tfFlatMult}</span><b>×{flatMult.toFixed(2)}</b></label>
+          <label><span>{L.tfFlatMult} <Help txt={L.help.flatMult} /></span><b>×{flatMult.toFixed(2)}</b></label>
           <input type="range" min="0.5" max="2" step="0.05" value={flatMult} onChange={e => setFlatMult(+e.target.value)} />
         </div>
         <div className="control">
-          <label><span>{L.tfElasticMult}</span><b>×{elasticMult.toFixed(2)}</b></label>
+          <label><span>{L.tfElasticMult} <Help txt={L.help.elasticMult} /></span><b>×{elasticMult.toFixed(2)}</b></label>
           <input type="range" min="0.5" max="3" step="0.05" value={elasticMult} onChange={e => setElasticMult(+e.target.value)} />
         </div>
         <div className="control">
-          <label><span>{L.tfBlendedMult}</span><b>×{blendedMult.toFixed(2)}</b></label>
+          <label><span>{L.tfBlendedMult} <Help txt={L.help.blendedMult} /></span><b>×{blendedMult.toFixed(2)}</b></label>
           <input type="range" min="0.5" max="2" step="0.05" value={blendedMult} onChange={e => setBlendedMult(+e.target.value)} />
         </div>
         <button className="lang-btn" style={{ marginTop: 6, fontSize: 12, fontWeight: 500 }}
