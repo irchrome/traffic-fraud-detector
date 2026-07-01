@@ -100,6 +100,71 @@ export function detect(accounts, meta, { weights, threshold } = {}) {
   return { scored, byRegion, totals, topExploiters }
 }
 
+// ── Реальные опорные тарифы 3HCloud (из прайса; MSK — оценка, нет в таблице) ──
+export const FLAT_TIERS = [100, 500, 1000, 2000, 5000, 10000] // committed Mbps
+export const FLAT_TARIFF = { // месячная цена flat-rate unmetered, USD, по региону×тиру
+  MNL: [200, 550, 1000, 1900, 4500, 8000],
+  DFW: [50, 138, 250, 475, 1125, 2000],
+  MIA: [50, 138, 250, 475, 1125, 2000],
+  WAW: [50, 138, 250, 475, 1125, 2000],
+  SFO: [50, 138, 250, 475, 1125, 2000],
+  ALA: [114, 314, 570, 1083, 2565, 4560],
+  MSK: [50, 138, 250, 475, 1125, 2000], // оценка ≈ Warsaw (нет в реальном прайсе)
+}
+export const ELASTIC_TARIFF = { // hourly $/Mbps сверх базовых 10 Mb/s; r1g — для скорости >1 Gb/s
+  MNL: { r10: 0.002, r1g: 0.001 },
+  DFW: { r10: 0.0004, r1g: 0.0003 },
+  MIA: { r10: 0.0004, r1g: 0.0003 },
+  WAW: { r10: 0.0004, r1g: 0.0003 },
+  SFO: { r10: 0.0004, r1g: 0.0003 },
+  ALA: { r10: 0.0007, r1g: 0.0005 },
+  MSK: { r10: 0.0004, r1g: 0.0003 }, // оценка
+}
+export const HOURS_MONTH = 730
+export const ELASTIC_BASE_MBPS = 10 // базовые 10 Mb/s включены
+export const TARIFF_ESTIMATE_REGIONS = ['MSK']
+
+// What-if: текущий план vs Flat-Unmetered vs Elastic(10Mb/s + превышение).
+// Множители позволяют варьировать тарифы и стоимость канала.
+export function tariffWhatIf(accounts, meta, { flatMult = 1, elasticMult = 1, blendedMult = 1 } = {}) {
+  const TR = meta.transit_usd_per_mbps
+  const per = accounts.map(a => {
+    const compute = a.compute_rev_usd
+    const transit = a.peak_band_mbps * (TR[a.region] || 0.3) * blendedMult
+    const curRev = a.plan_price_usd + compute
+    // Flat: наименьший порт-тир, покрывающий пик
+    let ti = FLAT_TIERS.findIndex(t => t >= a.peak_band_mbps)
+    if (ti === -1) ti = FLAT_TIERS.length - 1
+    const flatRev = (FLAT_TARIFF[a.region]?.[ti] ?? 0) * flatMult + compute
+    // Elastic: базовые 10 Mb/s включены, выше — почасово за Mbps
+    const er = ELASTIC_TARIFF[a.region] || { r10: 0.0004, r1g: 0.0003 }
+    const rate = (a.avg_band_mbps > 1000 ? er.r1g : er.r10) * elasticMult
+    const elasticRev = Math.max(0, a.avg_band_mbps - ELASTIC_BASE_MBPS) * rate * HOURS_MONTH + compute
+    return {
+      account_no: a.account_no, region: a.region, avg_band_mbps: a.avg_band_mbps,
+      peak_band_mbps: a.peak_band_mbps, port_tier: FLAT_TIERS[ti], transit,
+      curRev, flatRev, elasticRev,
+      curMargin: curRev - transit, flatMargin: flatRev - transit, elasticMargin: elasticRev - transit,
+    }
+  })
+  const agg = (rows) => ({
+    curRev: rows.reduce((s, x) => s + x.curRev, 0),
+    flatRev: rows.reduce((s, x) => s + x.flatRev, 0),
+    elasticRev: rows.reduce((s, x) => s + x.elasticRev, 0),
+    cost: rows.reduce((s, x) => s + x.transit, 0),
+    curMargin: rows.reduce((s, x) => s + x.curMargin, 0),
+    flatMargin: rows.reduce((s, x) => s + x.flatMargin, 0),
+    elasticMargin: rows.reduce((s, x) => s + x.elasticMargin, 0),
+    n: rows.length,
+  })
+  const byRegion = REGIONS.map(r => {
+    const rows = per.filter(x => x.region === r)
+    if (!rows.length) return null
+    return { region: r, ...agg(rows) }
+  }).filter(Boolean)
+  return { per, byRegion, totals: agg(per) }
+}
+
 export function fmtUSD(v, locale = 'en-US') {
   if (v == null) return '—'
   const n = Math.round(v).toLocaleString(locale)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, Cell,
 } from 'recharts'
-import { detect, fmtUSD, fmtNum } from './model.js'
+import { detect, tariffWhatIf, fmtUSD, fmtNum } from './model.js'
 import { t, numLocale, GT_LABELS } from './strings.js'
 
 const BASE = import.meta.env.BASE_URL
@@ -16,6 +16,10 @@ export default function App() {
   const [lang, setLang] = useState('en')
   const [threshold, setThreshold] = useState(0.45)
   const [weights, setWeights] = useState({ ...DEFAULT_W })
+  const [tab, setTab] = useState('detector')
+  const [flatMult, setFlatMult] = useState(1)
+  const [elasticMult, setElasticMult] = useState(1)
+  const [blendedMult, setBlendedMult] = useState(1)
 
   const L = t(lang); const loc = numLocale(lang)
   const usd = (v) => fmtUSD(v, loc)
@@ -28,6 +32,11 @@ export default function App() {
     if (!data) return null
     return detect(data.accounts, data._meta, { weights, threshold })
   }, [data, weights, threshold])
+
+  const tf = useMemo(() => {
+    if (!data) return null
+    return tariffWhatIf(data.accounts, data._meta, { flatMult, elasticMult, blendedMult })
+  }, [data, flatMult, elasticMult, blendedMult])
 
   if (error) return <div className="app"><p style={{ color: 'var(--danger)' }}>{error}</p></div>
   if (!data || !res) return <div className="app"><p>{L.loading}</p></div>
@@ -60,17 +69,23 @@ export default function App() {
         </div>
       </header>
 
+      <div className="cur-switch" style={{ marginTop: 14 }}>
+        <button className={tab === 'detector' ? 'active' : ''} onClick={() => setTab('detector')}>{L.tabDetector}</button>
+        <button className={tab === 'tariff' ? 'active' : ''} onClick={() => setTab('tariff')}>{L.tabTariff}</button>
+      </div>
+
+      {tab === 'detector' && (
       <div className="layout">
         <aside className="panel">
           <h2>{L.detectorTitle}</h2>
           <div className="control">
-            <label>{L.threshold}<b>{threshold.toFixed(2)}</b></label>
+            <label><span>{L.threshold} <Help txt={L.help.threshold} /></span><b>{threshold.toFixed(2)}</b></label>
             <input type="range" min="0.30" max="0.70" step="0.01" value={threshold} onChange={e => setThreshold(+e.target.value)} />
           </div>
           <h2 style={{ marginTop: 18 }}>{L.weightsTitle}</h2>
           {SIG_KEYS.map(k => (
             <div className="control" key={k}>
-              <label><span style={{ color: SIG_COLORS[k] }}>■</span> {L['w' + k[0].toUpperCase() + k.slice(1)]}<b>{weights[k].toFixed(2)}</b></label>
+              <label><span><span style={{ color: SIG_COLORS[k] }}>■</span> {L['w' + k[0].toUpperCase() + k.slice(1)]} <Help txt={L.help[k]} /></span><b>{weights[k].toFixed(2)}</b></label>
               <input type="range" min="0" max="0.5" step="0.01" value={weights[k]} onChange={e => setW(k, +e.target.value)} />
             </div>
           ))}
@@ -160,6 +175,14 @@ export default function App() {
           </div>
         </main>
       </div>
+      )}
+
+      {tab === 'tariff' && (
+        <TariffView tf={tf} L={L} usd={usd}
+          flatMult={flatMult} setFlatMult={setFlatMult}
+          elasticMult={elasticMult} setElasticMult={setElasticMult}
+          blendedMult={blendedMult} setBlendedMult={setBlendedMult} />
+      )}
 
       <p className="foot">{L.foot} <span className="tag-illu">{L.footIllu}</span>.</p>
     </div>
@@ -175,5 +198,86 @@ function SignalBars({ sub }) {
            style={{ height: `${Math.max(2, sub[k] * 18)}px`, background: sub[k] > 0.05 ? SIG_COLORS[k] : 'var(--line)' }} />
       ))}
     </span>
+  )
+}
+
+function Help({ txt }) {
+  return <span title={txt} style={{ cursor: 'help', color: 'var(--muted)', fontSize: 12 }}>ⓘ</span>
+}
+
+function TariffView({ tf, L, usd, flatMult, setFlatMult, elasticMult, setElasticMult, blendedMult, setBlendedMult }) {
+  if (!tf) return null
+  const T = tf.totals
+  const chart = tf.byRegion.map(r => ({ region: r.region, current: Math.round(r.curMargin), flat: Math.round(r.flatMargin), elastic: Math.round(r.elasticMargin) }))
+  return (
+    <div className="layout">
+      <aside className="panel">
+        <h2>{L.tfTitle}</h2>
+        <div className="note" style={{ marginBottom: 14 }}>{L.tfPatterns}</div>
+        <div className="control">
+          <label><span>{L.tfFlatMult}</span><b>×{flatMult.toFixed(2)}</b></label>
+          <input type="range" min="0.5" max="2" step="0.05" value={flatMult} onChange={e => setFlatMult(+e.target.value)} />
+        </div>
+        <div className="control">
+          <label><span>{L.tfElasticMult}</span><b>×{elasticMult.toFixed(2)}</b></label>
+          <input type="range" min="0.5" max="3" step="0.05" value={elasticMult} onChange={e => setElasticMult(+e.target.value)} />
+        </div>
+        <div className="control">
+          <label><span>{L.tfBlendedMult}</span><b>×{blendedMult.toFixed(2)}</b></label>
+          <input type="range" min="0.5" max="2" step="0.05" value={blendedMult} onChange={e => setBlendedMult(+e.target.value)} />
+        </div>
+        <button className="lang-btn" style={{ marginTop: 6, fontSize: 12, fontWeight: 500 }}
+          onClick={() => { setFlatMult(1); setElasticMult(1); setBlendedMult(1) }}>{L.reset}</button>
+      </aside>
+      <main>
+        <div className="kpis" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+          <div className="kpi"><div className="k-label">{L.kCurrent}</div><div className={'k-val ' + (T.curMargin >= 0 ? 'delta-up' : 'delta-down')}>{usd(T.curMargin)}</div><div className="k-sub">{L.usdEq}</div></div>
+          <div className="kpi"><div className="k-label">{L.kFlat}</div><div className={'k-val ' + (T.flatMargin >= 0 ? 'delta-up' : 'delta-down')}>{usd(T.flatMargin)}</div><div className="k-sub">Δ {usd(T.flatMargin - T.curMargin)}</div></div>
+          <div className="kpi"><div className="k-label">{L.kElastic}</div><div className={'k-val ' + (T.elasticMargin >= 0 ? 'delta-up' : 'delta-down')}>{usd(T.elasticMargin)}</div><div className="k-sub">Δ {usd(T.elasticMargin - T.curMargin)}</div></div>
+        </div>
+        <div className="panel" style={{ marginTop: 18 }}>
+          <p className="section-title">{L.tfChartTitle}</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chart} margin={{ top: 6, right: 8, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2f3b4a" />
+              <XAxis dataKey="region" tick={{ fill: '#93a1b0', fontSize: 11 }} />
+              <YAxis tick={{ fill: '#93a1b0', fontSize: 11 }} width={60} />
+              <Tooltip contentStyle={{ background: '#1a212b', border: '1px solid #2f3b4a', borderRadius: 8, color: '#e6edf3' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="current" name={L.legCur} fill="#4ea8de" />
+              <Bar dataKey="flat" name={L.legFlat} fill="#36c2a4" />
+              <Bar dataKey="elastic" name={L.legElastic} fill="#e8a33d" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="panel" style={{ marginTop: 18 }}>
+          <p className="section-title">{L.tfTableTitle}</p>
+          <table>
+            <thead>
+              <tr><th>{L.colRegion2}</th><th className="num">{L.colCost2}</th><th className="num">{L.colCur}</th><th className="num">{L.colFlat}</th><th className="num">{L.colElastic}</th></tr>
+            </thead>
+            <tbody>
+              {tf.byRegion.map(r => (
+                <tr key={r.region}>
+                  <td>{r.region}</td>
+                  <td className="num">{usd(r.cost)}</td>
+                  <td className="num" style={{ color: r.curMargin < 0 ? 'var(--danger)' : 'var(--muted)' }}>{usd(r.curMargin)}</td>
+                  <td className="num" style={{ color: r.flatMargin < 0 ? 'var(--danger)' : 'var(--accent)' }}>{usd(r.flatMargin)}</td>
+                  <td className="num" style={{ color: r.elasticMargin < 0 ? 'var(--danger)' : 'var(--warn)' }}>{usd(r.elasticMargin)}</td>
+                </tr>
+              ))}
+              <tr style={{ fontWeight: 700 }}>
+                <td>Σ</td>
+                <td className="num">{usd(T.cost)}</td>
+                <td className="num">{usd(T.curMargin)}</td>
+                <td className="num">{usd(T.flatMargin)}</td>
+                <td className="num">{usd(T.elasticMargin)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="note">{L.tfNote}</div>
+        </div>
+      </main>
+    </div>
   )
 }
